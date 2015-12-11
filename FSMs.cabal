@@ -1,0 +1,22 @@
+name: FSMs
+version: 1.0
+cabal-version: 1.6
+build-type: Simple
+license: AllRightsReserved
+stability: experimental
+Executable FSMs
+  ghc-options: -O2 -Wall -with-rtsopts="-H4096m"
+  main-is: FSMs.hs
+  buildable: True
+  build-depends:
+      base -any,
+      containers -any,
+      data-ordlist -any,
+      directory -any,
+      parsec -any
+  other-modules:
+      Mealy
+      Circuit
+      Patterns
+      Play
+      Kiss
