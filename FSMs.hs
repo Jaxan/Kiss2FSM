@@ -4,21 +4,14 @@
 import Circuit
 import Kiss
 import Patterns
-import Mealy
+import Minimization
 
 import Control.Monad
-import Data.Either
 import Data.List
-import System.IO
 import System.Directory
 import Text.Parsec
 
 path = "./examples/"
-filename1 = "scf.kiss2"
-filename2 = "nucpwr.kiss2"
-filename3 = "sand.kiss2"
-filename4 = "planet.kiss2"
-filename5 = "ex1.kiss2"
 
 main = doAll path
 
@@ -76,11 +69,11 @@ analyse f k@(Kiss keys ts)
   | ps <- map (\(a,_,_,_)->a) ts
   , is <- expandPatterns ps
   , c <- toCircuit k
-  , (st1, o1) <- initialState k
+  , (st1, op1) <- initialState k
   , nd <- nondeterminism is c
   , pt <- incompleteness is c
-  , m1 <- toObservingMealy c is st1
-  , m2 <- toNonObservingMealy c is st1 o1
+  , (s1, o1, t1) <- toObservingMealy c is st1
+  , (s2, o2, t2) <- toNonObservingMealy c is (st1, op1)
   , acceptable <- null nd && null pt
   = Result
     { filename = f
@@ -90,24 +83,7 @@ analyse f k@(Kiss keys ts)
     , outputBits = lookup "o" keys
     , originalStates = lookup "s" keys
     , expandedInputs = length is
-    , reachableStates = if acceptable then Just $ length . mooreF $ m1 else Nothing 
-    , reachableFullStates = if acceptable then Just $ length . mooreF $ m2 else Nothing
+    , reachableStates = if acceptable then Just $ size (minimize s1 o1 t1) else Nothing 
+    , reachableFullStates = if acceptable then Just $ size (minimize s2 o2 t2) else Nothing
     }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 

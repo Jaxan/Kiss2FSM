@@ -5,7 +5,7 @@ build-type: Simple
 license: AllRightsReserved
 stability: experimental
 Executable FSMs
-  ghc-options: -O2 -Wall -with-rtsopts="-H4096m"
+  ghc-options: -O2 -Wall
   main-is: FSMs.hs
   buildable: True
   build-depends:
@@ -15,8 +15,8 @@ Executable FSMs
       directory -any,
       parsec -any
   other-modules:
-      Mealy
+      Minimization
       Circuit
+      Kiss
       Patterns
       Play
-      Kiss

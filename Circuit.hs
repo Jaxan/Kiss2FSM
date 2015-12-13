@@ -1,7 +1,6 @@
 module Circuit where
 
 import Patterns
-import Mealy
 
 import Prelude hiding (lookup)
 import Control.Monad (replicateM)
@@ -66,35 +65,20 @@ nonObservingReachability c is st o1 = dfs c is st o1 (singleton (st, o1))
       False -> dfs c is st2 o2 (acc `union` singleton (st2, o2))
 
 
-toObservingMealy :: Circuit -> [InputPattern] -> State -> Machine State InputPattern OutputPattern
-toObservingMealy c is st = Machine (toList $ observingReachability c is st) is (get snd behaviour) (get fst behaviour)
+toObservingMealy :: Circuit -> [InputPattern] -> State -> ([State], State -> [OutputPattern], [State -> State])
+toObservingMealy c is st = (toList $ observingReachability c is st, \s -> map (\i -> snd $ behaviour s i) is, map (\i s -> fst $ behaviour s i) is)
   where
-    get field fun = \s i -> field $ fun s i
     behaviour st i = case observingBehaviour c st i of
       [] -> error "Not defined"
       [x] -> x
       _ -> error "Non det mealy"
-      
-toNonObservingMealy :: Circuit -> [InputPattern] -> State -> OutputPattern -> Machine (State, OutputPattern) InputPattern OutputPattern
-toNonObservingMealy c is st o1 = Machine (toList $ nonObservingReachability c is st o1) is (get snd behaviour) (get fst behaviour)
+
+type NState = (State, OutputPattern)
+toNonObservingMealy :: Circuit -> [InputPattern] -> NState -> ([NState], NState -> [OutputPattern], [NState -> NState])
+toNonObservingMealy c is (st, o1) = (toList $ nonObservingReachability c is st o1, \s -> map (\i -> snd $ behaviour s i) is, map (\i s -> fst $ behaviour s i) is)
   where
-    get field fun = \s i -> field $ fun s i
     behaviour (st, o1) i = case nonObservingBehaviour c st o1 i of
       [] -> error "Not defined"
       [(x, o2)] -> ((x, o1 `set` o2), o1 `set` o2)
       _ -> error "Non det mealy"
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
