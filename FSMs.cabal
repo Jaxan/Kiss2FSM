@@ -15,8 +15,8 @@ Executable FSMs
       directory -any,
       parsec -any
   other-modules:
-      Minimization
-      Circuit
       Kiss
+      Circuit
       Patterns
       Play
+      Minimization

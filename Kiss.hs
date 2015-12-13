@@ -2,15 +2,13 @@ module Kiss where
 
 import Circuit
 import Patterns
-
 import Data.Monoid
-import Data.List (lookup, length)
 import Data.List.Ordered (nubSort)
-import Data.Map.Strict (insertWith, empty, fromList)
+import Data.Map.Strict (insertWith, fromList)
 
 import Control.Applicative
 import Text.Parsec.String (Parser)
-import Text.Parsec (many1, satisfy, string, parseTest, spaces, endBy, newline, digit)
+import Text.Parsec (many1, satisfy, string, spaces, endBy, digit)
 import Text.Parsec.Char (char)
 import Data.Char (isAlphaNum)
 

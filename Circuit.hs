@@ -1,84 +1,84 @@
+{-# LANGUAGE TypeFamilies, FlexibleContexts #-}
+
 module Circuit where
 
 import Patterns
+import Minimization
 
 import Prelude hiding (lookup)
-import Control.Monad (replicateM)
-import Data.Monoid
 import Data.List.Ordered (nubSort)
-import Data.Map.Strict (Map, elems, mapWithKey, lookup, keys)
-import Data.Set (Set, empty, member, union, singleton, toList)
+import Data.Map.Strict (Map, lookup)
+import Data.Set (Set, empty, member, insert, singleton, toList)
 
 type InputPattern = Pattern
 type OutputPattern = Pattern
 type Circuit = Map State [(InputPattern, (State, OutputPattern))]
 
-{-
-I should do some refactoring here
-the pattern: nubSort . map snd . filter (fits i . fst)
-is used a lot
--}
 
--- returns non deterministic states and patterns
--- nondeterminism :: [Pattern] -> Circuit -> [(State, Pattern)]
-nondeterminism inputs m = concat . elems $ nonDetM
+-- Semantics is given by an actual state type, and a transition function
+class Sem a where
+  type ExpandedState a
+  beh :: a -> ExpandedState a -> InputPattern -> [(ExpandedState a, OutputPattern)]
+
+-- Collects all reachable states (and possible outputs) from a start states
+reachability :: (Sem a, Ord (ExpandedState a)) => a -> [InputPattern] -> ExpandedState a -> (Set (ExpandedState a), Set OutputPattern)
+reachability c is st = dfs c is st (singleton st, empty)
   where
-    checkOne i s ts = nubSort . map snd . filter (fits i . fst) $ ts
-    check s ts = [(s, i, checkOne i s ts) | i <- inputs, length (checkOne i s ts) > 1]
-    nonDetM = mapWithKey check m
+    dfs c is st (stAcc, oAcc) = foldr update (stAcc, oAcc) (concat [beh c st i | i <- is])
+    update (st2, o2) (stAcc, outAcc) = case member st2 stAcc of
+      True -> (stAcc, insert o2 outAcc)
+      False -> dfs c is st2 (insert st2 stAcc, insert o2 outAcc)
 
--- returns states and patterns for which nothing is defined
--- incompleteness :: [Pattern] -> Circuit -> [(State, Pattern)]
-incompleteness inputs m = concat . elems $ incompM
+-- Returns true if the behavriour is deterministic
+isDeterministic :: (Sem a) => a -> [ExpandedState a] -> [InputPattern] -> Bool
+isDeterministic c states is = all check states
   where
-    checkOne i s ts = nubSort . map snd . filter (fits i . fst) $ ts
-    check s ts = [(s, i, checkOne i s ts) | i <- inputs, length (checkOne i s ts) < 1]
-    incompM = mapWithKey check m
+    checkOne state i = length (beh c state i) <= 1
+    check state = all (checkOne state) is
 
--- We can observe '-' as output
-observingBehaviour :: Circuit -> State -> InputPattern -> [(State, OutputPattern)]
-observingBehaviour c st p = case lookup st c of
-  Nothing -> error $ "No such state: " ++ st
-  Just l -> nubSort . map snd . filter (fits p . fst) $ l
-
--- We cannot observe '-' as output, so it is 'hidden' state
-nonObservingBehaviour :: Circuit -> State -> OutputPattern -> InputPattern -> [(State, OutputPattern)]
-nonObservingBehaviour c st o1 p = case lookup st c of
-  Nothing -> error $ "No such state: " ++ st
-  Just l -> nubSort . map (\(st2, p2) -> (st2, o1 `set` p2)) . map snd . filter (fits p . fst) $ l
-
-
-observingReachability :: Circuit -> [InputPattern] -> State -> Set State
-observingReachability c is st = dfs c is st (singleton st)
+-- Returns true if the behavriour is always defined
+isComplete :: (Sem a) => a -> [ExpandedState a] -> [InputPattern] -> Bool
+isComplete c states is = all check states
   where
-    dfs c is st acc = foldr update acc (concat [observingBehaviour c st i | i <- is])
-    update (st2, _) acc = case member st2 acc of
-      True -> acc
-      False -> dfs c is st2 (acc `union` singleton st2)
+    checkOne state i = length (beh c state i) >= 1
+    check state = all (checkOne state) is
 
-nonObservingReachability :: Circuit -> [InputPattern] -> State -> OutputPattern -> Set (State, OutputPattern)
-nonObservingReachability c is st o1 = dfs c is st o1 (singleton (st, o1))
+-- We can convert to the format used for minimization
+-- Maybe we shouldn't use an initial state here
+-- Minimization does not need an initial state anyways
+type Carrier a = [ExpandedState a]
+type Output a = ExpandedState a -> [OutputPattern]
+type Transitions a = [ExpandedState a -> ExpandedState a]
+toMealy :: (Sem a, Ord (ExpandedState a)) => a -> [InputPattern] -> ExpandedState a -> (Carrier a, Output a, Transitions a)
+toMealy c is st = (carrier, output, transitions)
   where
-    dfs c is st o1 acc = foldr update acc (concat [nonObservingBehaviour c st o1 i | i <- is])
-    update (st2, o2) acc = case member (st2, o2) acc of
-      True -> acc
-      False -> dfs c is st2 o2 (acc `union` singleton (st2, o2))
-
-
-toObservingMealy :: Circuit -> [InputPattern] -> State -> ([State], State -> [OutputPattern], [State -> State])
-toObservingMealy c is st = (toList $ observingReachability c is st, \s -> map (\i -> snd $ behaviour s i) is, map (\i s -> fst $ behaviour s i) is)
-  where
-    behaviour st i = case observingBehaviour c st i of
+    carrier = toList . fst $ reachability c is st
+    output = \s -> map (\i -> snd $ behaviour s i) is
+    transitions = map (\i s -> fst $ behaviour s i) is
+    behaviour st i = case beh c st i of
       [] -> error "Not defined"
       [x] -> x
       _ -> error "Non det mealy"
 
-type NState = (State, OutputPattern)
-toNonObservingMealy :: Circuit -> [InputPattern] -> NState -> ([NState], NState -> [OutputPattern], [NState -> NState])
-toNonObservingMealy c is (st, o1) = (toList $ nonObservingReachability c is st o1, \s -> map (\i -> snd $ behaviour s i) is, map (\i s -> fst $ behaviour s i) is)
-  where
-    behaviour (st, o1) i = case nonObservingBehaviour c st o1 i of
-      [] -> error "Not defined"
-      [(x, o2)] -> ((x, o1 `set` o2), o1 `set` o2)
-      _ -> error "Non det mealy"
+numberOfStates circuit is st = size . (\(a,b,c) -> minimize a b c) $ toMealy circuit is st
 
+-- Observable: we can observe the don't-care bits '-'
+newtype Obs = Obs Circuit
+  deriving Show
+
+instance Sem Obs where
+  type ExpandedState Obs = State
+  beh (Obs c) st p = case lookup st c of
+    Nothing -> error $ "No such state: " ++ st
+    Just l -> nubSort [next | (i, next) <- l, p `fits` i]
+
+
+-- Non observable: we cannot observe '-', instead, those bits will remain the same
+newtype Nobs = Nobs Circuit
+  deriving Show
+
+instance Sem Nobs where
+  type ExpandedState Nobs = (State, OutputPattern)
+  beh (Nobs c) (st, o1) p = case lookup st c of
+    Nothing -> error $ "No such state: " ++ st
+    Just l -> nubSort [((st2, o1 `set` o2), o1 `set` o2) | (i, (st2, o2)) <- l, p `fits` i]
