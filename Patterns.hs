@@ -6,9 +6,11 @@ import Control.Arrow ((&&&))
 import Data.List (tails)
 import Data.List.Ordered (nubSortOn)
 import Data.Set (member, union, empty, insert)
+import Data.Vector (zipWith, and, all, filter, replicate, length, Vector)
+import Prelude hiding (zipWith, and, all, filter, replicate, length)
 
 type State = String
-type Pattern = String
+type Pattern = Vector Char
 
 -- Basics per bit
 compa x y = x == '-' || y == '-' || x == y   -- compatible bits (symmetric)
@@ -19,7 +21,6 @@ defi c    = c == '0' || c == '1'             -- defined bits
 compatible xs ys = and $ zipWith compa xs ys -- e.g. "-0-" `compatible` "1--"
 fits xs ys       = and $ zipWith fit xs ys   -- e.g. "011" `fits` "---"
 defined xs       = all defi xs               -- e.g. "011", but not "-01"
-
 
 -- definiteness of a sequences, useful for (topological) sorting
 grade = length . filter defi
@@ -55,10 +56,7 @@ set xs ys = zipWith st xs ys
 -- everything with folds and such (fusing dfs with leaves). But this was easier
 -- for me.
 data Tree a = Node [Tree a] a
-  deriving (Read, Eq, Ord, Functor)
-
-instance Show a => Show (Tree a) where
-  show (Node ls a) = "[Node " ++ show a ++ " " ++ show (length ls) ++ " " ++ show ls ++ "]"
+  deriving (Show, Read, Eq, Ord, Functor)
 
 
 -- It is created with a depth first search, siblings of a node cannot be
