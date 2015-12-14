@@ -29,19 +29,25 @@ reachability c is st = dfs c is st (singleton st, empty)
       True -> (stAcc, insert o2 outAcc)
       False -> dfs c is st2 (insert st2 stAcc, insert o2 outAcc)
 
+-- Generalisation of the checks isDeterministic and isComplete.
+isSomething :: (Sem a) => ([(ExpandedState a, OutputPattern)] -> Bool) -> a -> [ExpandedState a] -> [InputPattern] -> Bool
+isSomething f c states is = all check states
+  where
+    checkOne state i = f (beh c state i)
+    check state = all (checkOne state) is
+
 -- Returns true if the behavriour is deterministic
 isDeterministic :: (Sem a) => a -> [ExpandedState a] -> [InputPattern] -> Bool
-isDeterministic c states is = all check states
-  where
-    checkOne state i = length (beh c state i) <= 1
-    check state = all (checkOne state) is
+isDeterministic = isSomething (\b -> length b <= 1)
 
 -- Returns true if the behavriour is always defined
 isComplete :: (Sem a) => a -> [ExpandedState a] -> [InputPattern] -> Bool
-isComplete c states is = all check states
-  where
-    checkOne state i = length (beh c state i) >= 1
-    check state = all (checkOne state) is
+isComplete = isSomething (not . null)
+
+-- Fused the two checks above
+isDeterministicAndComplete :: (Sem a) => a -> [ExpandedState a] -> [InputPattern] -> Bool
+isDeterministicAndComplete = isSomething isSingleton
+  where isSingleton [_] = True; isSingleton _ = False
 
 -- We can convert to the format used for minimization
 -- Maybe we shouldn't use an initial state here
@@ -49,10 +55,9 @@ isComplete c states is = all check states
 type Carrier a = [ExpandedState a]
 type Output a = ExpandedState a -> [OutputPattern]
 type Transitions a = [ExpandedState a -> ExpandedState a]
-toMealy :: (Sem a, Ord (ExpandedState a)) => a -> [InputPattern] -> ExpandedState a -> (Carrier a, Output a, Transitions a)
-toMealy c is st = (carrier, output, transitions)
+toMealy :: (Sem a, Ord (ExpandedState a)) => a -> [ExpandedState a] -> [InputPattern] -> (Carrier a, Output a, Transitions a)
+toMealy c carrier is = (carrier, output, transitions)
   where
-    carrier = toList . fst $ reachability c is st
     output = \s -> map (\i -> snd $ behaviour s i) is
     transitions = map (\i s -> fst $ behaviour s i) is
     behaviour st i = case beh c st i of
@@ -60,7 +65,9 @@ toMealy c is st = (carrier, output, transitions)
       [x] -> x
       _ -> error "Non det mealy"
 
-numberOfStates circuit is st = size . (\(a,b,c) -> minimize a b c) $ toMealy circuit is st
+-- Minimized number of states. Would be an easy composition is we had uncurry3
+numberOfStates circuit states is = size . (\(a,b,c) -> minimize a b c) $ toMealy circuit states is
+
 
 -- Observable: we can observe the don't-care bits '-'
 newtype Obs = Obs Circuit

@@ -13,6 +13,7 @@ Executable FSMs
       containers -any,
       data-ordlist -any,
       directory -any,
+      vector -any,
       parsec -any
   other-modules:
       Kiss

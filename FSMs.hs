@@ -72,16 +72,18 @@ analyse f k@(Kiss keys ts)
   , (st1, op1) <- initialState k
   , oc <- Obs c
   , (toList -> ostates,_) <- reachability oc is st1
+  , ovalid <- isDeterministicAndComplete oc ostates is
   , nc <- Nobs c
   , (toList -> nstates,_) <- reachability nc is (st1, op1)
+  , nvalid <- isDeterministicAndComplete nc nstates is
   = Result
     { filename = f
-    , deterministic = isDeterministic oc ostates is
-    , complete = isComplete oc ostates is
+    , deterministic = True
+    , complete = ovalid
     , inputBits = lookup "i" keys
     , outputBits = lookup "o" keys
     , originalStates = lookup "s" keys
     , expandedInputs = length is
-    , reachableStates = if isComplete oc ostates is && isDeterministic oc ostates is then Just $ numberOfStates oc is st1 else Nothing 
-    , reachableFullStates = if isComplete nc nstates is && isDeterministic nc nstates is then Just $ numberOfStates nc is (st1, op1) else Nothing 
+    , reachableStates = if ovalid then Just $ numberOfStates oc ostates is else Nothing 
+    , reachableFullStates = if nvalid then Just $ numberOfStates nc nstates is else Nothing 
     }
