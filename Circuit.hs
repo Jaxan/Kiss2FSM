@@ -20,14 +20,14 @@ class Sem a where
   type ExpandedState a
   beh :: a -> ExpandedState a -> InputPattern -> [(ExpandedState a, OutputPattern)]
 
--- Collects all reachable states (and possible outputs) from a start states
-reachability :: (Sem a, Ord (ExpandedState a)) => a -> [InputPattern] -> ExpandedState a -> (Set (ExpandedState a), Set OutputPattern)
-reachability c is st = dfs c is st (singleton st, empty)
+-- Collects all reachable statesfrom a start states
+reachability :: (Sem a, Ord (ExpandedState a)) => a -> [InputPattern] -> ExpandedState a -> Set (ExpandedState a)
+reachability c is st = dfs c is st (singleton st)
   where
-    dfs c is st (stAcc, oAcc) = foldr update (stAcc, oAcc) (concat [beh c st i | i <- is])
-    update (st2, o2) (stAcc, outAcc) = case member st2 stAcc of
-      True -> (stAcc, insert o2 outAcc)
-      False -> dfs c is st2 (insert st2 stAcc, insert o2 outAcc)
+    dfs c is st stAcc = foldr update stAcc [b | i <- is, b <- beh c st i]
+    update (st2, o2) stAcc = case member st2 stAcc of
+      True -> stAcc
+      False -> dfs c is st2 (insert st2 stAcc)
 
 -- Generalisation of the checks isDeterministic and isComplete.
 isSomething :: (Sem a) => ([(ExpandedState a, OutputPattern)] -> Bool) -> a -> [ExpandedState a] -> [InputPattern] -> Bool

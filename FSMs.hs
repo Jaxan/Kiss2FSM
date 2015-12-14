@@ -71,10 +71,10 @@ analyse f k@(Kiss keys ts)
   , c <- toCircuit k
   , (st1, op1) <- initialState k
   , oc <- Obs c
-  , (toList -> ostates,_) <- reachability oc is st1
+  , ostates <- toList $ reachability oc is st1
   , ovalid <- isDeterministicAndComplete oc ostates is
   , nc <- Nobs c
-  , (toList -> nstates,_) <- reachability nc is (st1, op1)
+  , nstates <- toList $ reachability nc is (st1, op1)
   , nvalid <- isDeterministicAndComplete nc nstates is
   = Result
     { filename = f
