@@ -1,5 +1,6 @@
 {-# LANGUAGE PatternGuards, ViewPatterns #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 import Circuit
 import Kiss
@@ -64,26 +65,34 @@ instance Show Result where
       p Nothing = "?"
       p (Just i) = show i
 
+analyseSem sem init is
+  | sts <- toList $ reachability sem is init
+  , valid <- isDeterministicAndComplete sem sts is
+  = case valid of
+      True -> Just $ numberOfStates sem sts is
+      False -> Nothing
+
+isNothing Nothing = True
+isNothing _ = False
+
 analyse :: String -> KissFormat -> Result
 analyse f k@(Kiss keys ts)
   | ps <- map (\(a,_,_,_)->a) ts
   , is <- expandPatterns ps
   , c <- toCircuit k
   , (st1, op1) <- initialState k
-  , oc <- Obs c
-  , ostates <- toList $ reachability oc is st1
-  , ovalid <- isDeterministicAndComplete oc ostates is
-  , nc <- Nobs c
-  , nstates <- toList $ reachability nc is (st1, op1)
-  , nvalid <- isDeterministicAndComplete nc nstates is
+  , n1 <- analyseSem (base c) (st1) is
+  , n2 <- analyseSem (completeBase c) (st1) is
+  , n3 <- analyseSem (hiddenStates c) (st1, op1) is
+  , n4 <- analyseSem (completeHiddenStates c) (st1, op1) is
   = Result
     { filename = f
     , deterministic = True
-    , complete = ovalid
+    , complete = not $ isNothing n1
     , inputBits = lookup "i" keys
     , outputBits = lookup "o" keys
     , originalStates = lookup "s" keys
     , expandedInputs = length is
-    , reachableStates = if ovalid then Just $ numberOfStates oc ostates is else Nothing 
-    , reachableFullStates = if nvalid then Just $ numberOfStates nc nstates is else Nothing 
+    , reachableStates = if isNothing n1 then n2 else n1
+    , reachableFullStates = if isNothing n3 then n4 else n3
     }
