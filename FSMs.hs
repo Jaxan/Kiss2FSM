@@ -3,96 +3,63 @@
 {-# LANGUAGE FlexibleContexts #-}
 
 import Circuit
+import Dot
 import Kiss
 import Patterns
 
+import Control.Exception
 import Control.Monad
-import Data.List
+import Data.List (isPrefixOf)
+import Data.List.Ordered (nubSort)
 import Data.Set (toList)
 import System.Directory
-import Text.Parsec
+import System.Environment
+import Text.Parsec (parse)
 
 path = "./examples/"
 
-main = doAll path
+main = do
+  [p, f] <- getArgs
+  convert p f
 
 doAll path = do
-  putStrLn showHeader
   ls <- getDirectoryContents path
   let kisses = filter (isPrefixOf (reverse ".kiss2") . reverse) ls
-  forM kisses (\f -> do
-    mr <- yolo path f
-    case mr of
-      Nothing -> putStr ""
-      Just r -> print r)
+  forM kisses (\f -> catch (convert path f) (handler f))
+  where
+    handler :: String -> SomeException -> IO ()
+    handler f ex = putStrLn $ "Caught exception: " ++ f ++ ": " ++ show ex
 
+convert :: String -> String -> IO ()
+convert path filename = do
+  Just (circuit, is, init) <- open path filename
+  convertSem filename (sinkObservable circuit) is init
+  convertSem filename (loopObservable circuit) is init
+  convertSem filename (sinkHidden circuit) is init
+  convertSem filename (loopHidden circuit) is init
 
-yolo path filename = do
+convertSem f s is init0 = do
+  let name = takeWhile (/= '.') . reverse . takeWhile (/= '/') . reverse $ f
+  let init = canonicalState s init0
+  let sts = toList $ reachability s is init
+  catch (putStrLn $ printCircuitAsDot name s sts is init) handler
+  let s2 = minimal s sts is
+  let sts2 = nubSort $ fmap (minimalState s2) sts
+  let init2 = minimalState s2 init
+  catch (putStrLn $ printCircuitAsDot name s2 sts2 is init2) handler
+  where
+    handler :: SomeException -> IO ()
+    handler ex = putStrLn $ "Caught exception: " ++ f ++ ": " ++ show ex
+
+open :: String -> String -> IO (Maybe (Circuit, [InputPattern], State))
+open path filename = do
   file <- readFile (path ++ filename)
-  let p = parse parseKiss filename file
-  case p of
+  case parse parseKiss filename file of
     Left error -> do
       print error
       return Nothing
-    Right k -> do
-      return . Just $ analyse filename k
-
-data Result = Result
-  { filename :: String
-  , deterministic :: Bool
-  , complete :: Bool
-  , originalStates :: Maybe Int
-  , inputBits :: Maybe Int
-  , outputBits :: Maybe Int
-  , expandedInputs :: Int
-  , reachableStates :: Maybe Int
-  , reachableFullStates :: Maybe Int
-  }
-
-showHeader = "filename\tdeterministic\tcomplete\toriginalStates\tinputBits\toutputBits\texpandedInputs\treachableStates\treachableFullStates"
-
-instance Show Result where
-  show (Result {..}) = take 10 (filename ++ repeat ' ')
-    ++ "\t" ++ show deterministic
-    ++ "\t" ++ show complete
-    ++ "\t" ++ p originalStates
-    ++ "\t" ++ p inputBits
-    ++ "\t" ++ p outputBits
-    ++ "\t" ++ show expandedInputs
-    ++ "\t" ++ p reachableStates
-    ++ "\t" ++ p reachableFullStates
-    where
-      p Nothing = "?"
-      p (Just i) = show i
-
-analyseSem sem init is
-  | sts <- toList $ reachability sem is init
-  , valid <- isDeterministicAndComplete sem sts is
-  = case valid of
-      True -> Just $ numberOfStates sem sts is
-      False -> Nothing
-
-isNothing Nothing = True
-isNothing _ = False
-
-analyse :: String -> KissFormat -> Result
-analyse f k@(Kiss keys ts)
-  | ps <- map (\(a,_,_,_)->a) ts
-  , is <- expandPatterns ps
-  , c <- toCircuit k
-  , (st1, op1) <- initialState k
-  , n1 <- analyseSem (base c) (st1) is
-  , n2 <- analyseSem (completeBase c) (st1) is
-  , n3 <- analyseSem (hiddenStates c) (st1, op1) is
-  , n4 <- analyseSem (completeHiddenStates c) (st1, op1) is
-  = Result
-    { filename = f
-    , deterministic = True
-    , complete = not $ isNothing n1
-    , inputBits = lookup "i" keys
-    , outputBits = lookup "o" keys
-    , originalStates = lookup "s" keys
-    , expandedInputs = length is
-    , reachableStates = if isNothing n1 then n2 else n1
-    , reachableFullStates = if isNothing n3 then n4 else n3
-    }
+    Right k@(Kiss keys ts) -> do
+      let c = toCircuit k
+      let is = expandPatterns $ map (\(a,_,_,_)->a) ts
+      let init = fst $ initialState k
+      return $ Just (c, is, init)

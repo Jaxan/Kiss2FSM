@@ -5,21 +5,23 @@ module Circuit where
 import Patterns
 import Minimization
 
-import Prelude hiding (lookup)
+import Prelude hiding (lookup, replicate)
 import Data.List.Ordered (nubSort)
 import Data.Map.Strict (Map, lookup, elems)
-import Data.Set (Set, empty, member, insert, singleton, toList)
+import Data.Set (Set, member, insert, singleton)
+import Data.Vector (replicate)
 
 type InputPattern = Pattern
 type OutputPattern = Pattern
 type Circuit = Map State [(InputPattern, (State, OutputPattern))]
 
-
 -- Semantics is given by an actual state type, and a transition function
 class Sem a where
   type ExpandedState a
   beh :: a -> ExpandedState a -> InputPattern -> [(ExpandedState a, OutputPattern)]
+  canonicalState :: a -> State -> ExpandedState a
   outputBits :: a -> Int
+  name :: a -> String
 
 -- Collects all reachable statesfrom a start states
 reachability :: (Sem a, Ord (ExpandedState a)) => a -> [InputPattern] -> ExpandedState a -> Set (ExpandedState a)
@@ -69,41 +71,65 @@ toMealy c carrier is = (carrier, output, transitions)
 -- Minimized number of states. Would be an easy composition is we had uncurry3
 numberOfStates circuit states is = size . (\(a,b,c) -> minimize a b c) $ toMealy circuit states is
 
-
 -- Some semantics
-base = Base
-completeBase = Compl . base
-hiddenStates = Nobs . base
-completeHiddenStates = Nobs . completeBase
+sinkObservable = ComplSink . Base
+loopObservable = Compl . Base
+sinkHidden = ComplSink . Nobs . Base
+loopHidden = Nobs . Compl . Base
 
+minimal circuit states is = Minimal (circuit, (\(a,b,c) -> minimize a b c) $ toMealy circuit states is)
 
 -- Observable: we can observe the don't-care bits '-'
 newtype Base = Base Circuit
-  deriving Show
-
 instance Sem Base where
   type ExpandedState Base = State
   beh (Base c) st p = case lookup st c of
     Nothing -> error $ "No such state: " ++ st
     Just l -> nubSort [next | (i, next) <- l, p `fits` i]
+  canonicalState _ st = st
   outputBits (Base c) = length . snd . snd . head . concat . elems $ c
+  name _ = ""
 
 -- Completion: add self loops with don't-care output to complete the machine
 newtype Compl b = Compl b
-  deriving Show
-
 instance Sem b => Sem (Compl b) where
   type ExpandedState (Compl b) = ExpandedState b
   beh (Compl b) st p = case beh b st p of
     [] -> [(st, matchAll (outputBits b))]
     x -> x
+  canonicalState (Compl b) = canonicalState b
   outputBits (Compl b) = outputBits b
+  name (Compl b) = name b ++ "_with_loops"
+
+-- Completion: add a sink state
+newtype ComplSink b = ComplSink b
+instance Sem b => Sem (ComplSink b) where
+  type ExpandedState (ComplSink b) = Maybe (ExpandedState b)
+  beh (ComplSink b) Nothing _  = [(Nothing, matchAll (outputBits b))]
+  beh (ComplSink b) (Just s) p = case beh b s p of
+    [] -> [(Nothing, matchAll (outputBits b))]
+    x -> map (\(s, o) -> (Just s, o)) x
+  canonicalState (ComplSink b) = Just . canonicalState b
+  outputBits (ComplSink b) = outputBits b
+  name (ComplSink b) = name b ++ "_with_sink"
 
 -- Non observable: we cannot observe '-', instead, those bits will remain the same
 newtype Nobs b = Nobs b
-  deriving Show
-
 instance (Sem b, Ord (ExpandedState b)) => Sem (Nobs b) where
   type ExpandedState (Nobs b) = (ExpandedState b, OutputPattern)
   beh (Nobs b) (st, o1) p = nubSort [((st2, o1 `set` o2), o1 `set` o2) | (st2, o2) <- beh b st p]
+  canonicalState (Nobs b) st = (canonicalState b st, replicate (outputBits b) '0')
   outputBits (Nobs b) = outputBits b
+  name (Nobs b) = name b ++ "_with_hidden_states"
+
+-- We can also wrap a minimal thingy as newtype :D
+newtype Minimal b = Minimal (b, Partition (ExpandedState b))
+newtype MinimalS s = MinimalS s deriving (Eq, Ord)
+instance (Sem b, Ord (ExpandedState b)) => Sem (Minimal b) where
+  type ExpandedState (Minimal b) = MinimalS (ExpandedState b)
+  beh c@(Minimal (b, p)) (MinimalS s) i = nubSort [(minimalState c $ st2, o2) | (st2, o2) <- beh b s i]
+  canonicalState c@(Minimal (b, p)) s = minimalState c $ canonicalState b s
+  outputBits (Minimal (b, _)) = outputBits b
+  name (Minimal (b, _)) = name b ++ "_minimized"
+
+minimalState (Minimal (_, p)) = MinimalS . representative p . color p
