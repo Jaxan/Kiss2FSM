@@ -14,7 +14,8 @@ Executable FSMs
       data-ordlist -any,
       directory -any,
       vector -any,
-      parsec -any
+      parsec -any,
+      bytestring -any
   other-modules:
       Kiss
       Circuit

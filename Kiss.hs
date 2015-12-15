@@ -1,8 +1,9 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Kiss where
 
 import Circuit
 import Patterns
-import Data.Monoid
 import Data.List.Ordered (nubSort)
 import Data.Map.Strict as M (insertWith, fromList)
 
@@ -10,6 +11,7 @@ import Control.Applicative
 import Text.Parsec.String (Parser)
 import Text.Parsec (many1, satisfy, string, spaces, endBy, digit)
 import Text.Parsec.Char (char)
+import Data.ByteString.Char8 (ByteString, pack)
 import Data.Char (isAlphaNum)
 import Data.Vector as V (fromList)
 
@@ -21,7 +23,7 @@ So for now, I ignore it.
 
 data StateFormat = State State | Wildcard
   deriving (Show, Read, Eq, Ord)
-type Key = (String, Int)
+type Key = (ByteString, Int)
 type Rule = (Pattern, StateFormat, State, Pattern)
 data KissFormat = Kiss [Key] [Rule]
   deriving (Show, Read, Eq, Ord)
@@ -50,7 +52,7 @@ initialState (Kiss _ ((_, State st1, _, o2):_)) = (st1, fmap (const '0') o2)
     
   
 parseState :: Parser State
-parseState = many1 $ satisfy (liftA2 (||) isAlphaNum isAllowed)
+parseState = pack <$> (many1 $ satisfy (liftA2 (||) isAlphaNum isAllowed))
   where isAllowed c = c == '.' || c == '_'
 
 parseInt :: Parser Int
@@ -66,7 +68,7 @@ parsePattern = V.fromList <$> many1 (satisfy digit)
 parseLine :: Parser (Pattern, StateFormat, State, Pattern)
 parseLine = (,,,) <$> parsePattern <* spaces <*> parseStateFormat <* spaces <*> parseState <* spaces <*> parsePattern
 
-parseKey :: Parser (String, Int)
+parseKey :: Parser (ByteString, Int)
 parseKey = (,) <$> (char '.' *> parseState) <* spaces <*> parseInt
 
 parseKiss :: Parser KissFormat

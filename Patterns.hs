@@ -7,9 +7,10 @@ import Data.List (tails)
 import Data.List.Ordered (nubSortOn)
 import Data.Set (member, union, empty, insert)
 import Data.Vector (zipWith, and, all, filter, replicate, length, Vector)
+import Data.ByteString (ByteString)
 import Prelude hiding (zipWith, and, all, filter, replicate, length)
 
-type State = String
+type State = ByteString
 type Pattern = Vector Char
 
 -- Basics per bit
@@ -83,7 +84,7 @@ dfs xs = snd $ makechild root root xs
 -- The leaves of the derivation tree will contain the necessary elements
 leaves :: Tree a -> [a]
 leaves (Node [] a) = [a]
-leaves (Node xs a) = concatMap leaves xs
+leaves (Node xs _) = concatMap leaves xs
 
 -- Combining all the above. From a list of patterns, construct the necessary
 -- combinations. Note that it can happen that there are still combinations which

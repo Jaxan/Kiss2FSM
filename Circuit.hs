@@ -1,13 +1,17 @@
 {-# LANGUAGE TypeFamilies, FlexibleContexts #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Circuit where
 import Patterns
 import Minimization
 
 import Prelude hiding (lookup, replicate)
+import Data.ByteString.Builder (Builder)
+import Data.ByteString.Char8 (unpack)
 import Data.List.Ordered (nubSort)
 import Data.Map.Strict (Map, lookup, elems)
+import Data.Monoid ((<>))
 import Data.Set (Set, member, insert, singleton)
 import Data.Vector (replicate)
 
@@ -21,14 +25,14 @@ class Sem a where
   beh :: a -> ExpandedState a -> InputPattern -> [(ExpandedState a, OutputPattern)]
   canonicalState :: a -> State -> ExpandedState a
   outputBits :: a -> Int
-  name :: a -> String
+  name :: a -> Builder
 
 -- Collects all reachable statesfrom a start states
 reachability :: (Sem a, Ord (ExpandedState a)) => a -> [InputPattern] -> ExpandedState a -> Set (ExpandedState a)
 reachability c is st = dfs c is st (singleton st)
   where
     dfs c is st stAcc = foldr update stAcc [b | i <- is, b <- beh c st i]
-    update (st2, o2) stAcc = case member st2 stAcc of
+    update (st2, _) stAcc = case member st2 stAcc of
       True -> stAcc
       False -> dfs c is st2 (insert st2 stAcc)
 
@@ -68,9 +72,6 @@ toMealy c carrier is = (carrier, output, transitions)
       [x] -> x
       _ -> error "Non det mealy"
 
--- Minimized number of states. Would be an easy composition is we had uncurry3
-numberOfStates circuit states is = size . (\(a,b,c) -> minimize a b c) $ toMealy circuit states is
-
 -- Some semantics
 sinkObservable = ComplSink . Base
 loopObservable = Compl . Base
@@ -84,7 +85,7 @@ newtype Base = Base Circuit
 instance Sem Base where
   type ExpandedState Base = State
   beh (Base c) st p = case lookup st c of
-    Nothing -> error $ "No such state: " ++ st
+    Nothing -> error $ "No such state: " ++ unpack st
     Just l -> nubSort [next | (i, next) <- l, p `fits` i]
   canonicalState _ st = st
   outputBits (Base c) = length . snd . snd . head . concat . elems $ c
@@ -99,7 +100,7 @@ instance Sem b => Sem (Compl b) where
     x -> x
   canonicalState (Compl b) = canonicalState b
   outputBits (Compl b) = outputBits b
-  name (Compl b) = name b ++ "_with_loops"
+  name (Compl b) = name b <> "_with_loops"
 
 -- Completion: add a sink state
 newtype ComplSink b = ComplSink b
@@ -111,7 +112,7 @@ instance Sem b => Sem (ComplSink b) where
     x -> map (\(s, o) -> (Just s, o)) x
   canonicalState (ComplSink b) = Just . canonicalState b
   outputBits (ComplSink b) = outputBits b
-  name (ComplSink b) = name b ++ "_with_sink"
+  name (ComplSink b) = name b <> "_with_sink"
 
 -- Non observable: we cannot observe '-', instead, those bits will remain the same
 newtype Nobs b = Nobs b
@@ -120,16 +121,16 @@ instance (Sem b, Ord (ExpandedState b)) => Sem (Nobs b) where
   beh (Nobs b) (st, o1) p = nubSort [((st2, o1 `set` o2), o1 `set` o2) | (st2, o2) <- beh b st p]
   canonicalState (Nobs b) st = (canonicalState b st, replicate (outputBits b) '0')
   outputBits (Nobs b) = outputBits b
-  name (Nobs b) = name b ++ "_with_hidden_states"
+  name (Nobs b) = name b <> "_with_hidden_states"
 
 -- We can also wrap a minimal thingy as newtype :D
 newtype Minimal b = Minimal (b, Partition (ExpandedState b))
 newtype MinimalS s = MinimalS s deriving (Eq, Ord)
 instance (Sem b, Ord (ExpandedState b)) => Sem (Minimal b) where
   type ExpandedState (Minimal b) = MinimalS (ExpandedState b)
-  beh c@(Minimal (b, p)) (MinimalS s) i = nubSort [(minimalState c $ st2, o2) | (st2, o2) <- beh b s i]
-  canonicalState c@(Minimal (b, p)) s = minimalState c $ canonicalState b s
+  beh c@(Minimal (b, _)) (MinimalS s) i = nubSort [(minimalState c $ st2, o2) | (st2, o2) <- beh b s i]
+  canonicalState c@(Minimal (b, _)) s = minimalState c $ canonicalState b s
   outputBits (Minimal (b, _)) = outputBits b
-  name (Minimal (b, _)) = name b ++ "_minimized"
+  name (Minimal (b, _)) = name b <> "_minimized"
 
 minimalState (Minimal (_, p)) = MinimalS . representative p . color p
