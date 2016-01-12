@@ -10,15 +10,34 @@ Executable FSMs
   buildable: True
   build-depends:
       base -any,
+      bytestring -any,
       containers -any,
       data-ordlist -any,
       directory -any,
-      vector -any,
       parsec -any,
-      bytestring -any
+      text -any,
+      vector -any
   other-modules:
-      Kiss
       Circuit
-      Patterns
-      Play
+      Files
+      Kiss
       Minimization
+      Patterns
+Executable Minimize
+  ghc-options: -O2 -Wall -fprof-auto -prof "-with-rtsopts=-p -s -h"
+  main-is: Minimize.hs
+  buildable: True
+  build-depends:
+      base -any,
+      bytestring -any,
+      containers -any,
+      data-ordlist -any,
+      directory -any,
+      parsec -any,
+      text -any,
+      time -any,
+      vector -any
+  other-modules:
+      Mealy
+      Minimization
+      ReadDot
