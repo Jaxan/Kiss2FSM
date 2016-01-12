@@ -5,7 +5,8 @@ build-type: Simple
 license: AllRightsReserved
 stability: experimental
 Executable FSMs
-  ghc-options: -O2 -Wall
+  hs-source-dirs: src
+  ghc-options: -O2 -Wall -fno-warn-name-shadowing -fno-warn-missing-signatures -fprof-auto "-with-rtsopts=-p -s -h"
   main-is: FSMs.hs
   buildable: True
   build-depends:
@@ -19,24 +20,22 @@ Executable FSMs
       vector -any
   other-modules:
       Circuit
-      Files
+      Dot
       Kiss
       Minimization
       Patterns
 Executable Minimize
-  ghc-options: -O2 -Wall -fprof-auto -prof "-with-rtsopts=-p -s -h"
+  hs-source-dirs: src
+  ghc-options: -O2 -Wall -fno-warn-name-shadowing -fno-warn-missing-signatures -fprof-auto "-with-rtsopts=-p -s -h"
   main-is: Minimize.hs
   buildable: True
   build-depends:
       base -any,
       bytestring -any,
       containers -any,
-      data-ordlist -any,
-      directory -any,
       parsec -any,
       text -any,
-      time -any,
-      vector -any
+      time -any
   other-modules:
       Mealy
       Minimization

@@ -1,5 +1,3 @@
-{-# LANGUAGE PatternGuards, ViewPatterns #-}
-{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE FlexibleContexts #-}
 
 import Circuit
@@ -10,7 +8,7 @@ import Patterns
 import Control.Exception (catch, SomeException)
 import Control.Monad (forM)
 import Data.ByteString.Builder (hPutBuilder)
-import Data.List (isPrefixOf)
+import Data.List (isSuffixOf)
 import Data.List.Ordered (nubSort)
 import Data.Set (toList)
 import System.IO (stdout)
@@ -24,7 +22,7 @@ main = do
 
 doAll path = do
   ls <- getDirectoryContents path
-  let kisses = filter (isPrefixOf (reverse ".kiss2") . reverse) ls
+  let kisses = filter (isSuffixOf ".kiss2") ls
   forM kisses (\f -> catch (convert path f) (handler f))
   where
     handler :: String -> SomeException -> IO ()

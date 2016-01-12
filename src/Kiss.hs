@@ -29,7 +29,7 @@ data KissFormat = Kiss [Key] [Rule]
   deriving (Show, Read, Eq, Ord)
 
 getStates :: [Rule] -> [State]
-getStates l = nubSort . concat . map getIt $ l
+getStates l = nubSort . concatMap getIt $ l
   where
     getIt (_,Wildcard,x,_) = [x]
     getIt (_,State y,x,_)  = [x,y]
@@ -52,7 +52,7 @@ initialState (Kiss _ ((_, State st1, _, o2):_)) = (st1, fmap (const '0') o2)
     
   
 parseState :: Parser State
-parseState = pack <$> (many1 $ satisfy (liftA2 (||) isAlphaNum isAllowed))
+parseState = pack <$> many1 (satisfy (liftA2 (||) isAlphaNum isAllowed))
   where isAllowed c = c == '.' || c == '_'
 
 parseInt :: Parser Int
@@ -89,7 +89,7 @@ validate (Kiss keys l) =
     s = lookup "s" keys
     allEqual Nothing []      = undefined
     allEqual Nothing (x:xs)  = allEqual (Just x) xs
-    allEqual (Just x) []     = True
+    allEqual (Just _) []     = True
     allEqual (Just x) (y:xs) = x == y && allEqual (Just x) xs
     equal Nothing _  = True
     equal (Just x) y = x == y
