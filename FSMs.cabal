@@ -33,9 +33,9 @@ Executable Minimize
       base -any,
       bytestring -any,
       containers -any,
+      mtl -any,
       parsec -any,
-      text -any,
-      time -any
+      text -any
   other-modules:
       Mealy
       Minimization

@@ -23,7 +23,7 @@ privFrom = snd
 
 -- "color" / class of a state in the partition
 -- It is only well defined if the element occurs in the partition
-color :: (Ord s) => Partition s -> s -> Class
+color :: Ord s => Partition s -> s -> Class
 color (m, _) x = fromJust $ lookup x m
 
 -- The kind-of inverse of color, picks a representive from a class
