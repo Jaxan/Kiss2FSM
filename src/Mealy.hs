@@ -9,9 +9,25 @@
 
 module Mealy where
 
+{-
+ This file is concerned with definining Mealy machines and some operations.
+ Instead of a concrete data type, Mealy is defined as a type class. And
+ any representation can be minimized (as it only depends on the behaviour).
+ What we have here is:
+  - Definition of Mealy machine, and:
+  - Minimization
+  - Parsing dot files
+  - Writing to dot files
+
+ TODO:
+  - Reachability
+  - Partiality
+-}
+
 import           Control.Monad.Writer
 import           Data.ByteString         (ByteString)
 import           Data.ByteString.Builder
+import           Data.List.Ordered       (sortOn)
 import           Data.Map.Strict         as M (Map, adjust, empty, foldr,
                                                fromList, insert, keys, keysSet,
                                                lookup)
@@ -20,6 +36,7 @@ import           Data.Set                as S (empty, toList, union)
 import           Minimization
 import           ReadDot                 (Command (N, E), parseDot)
 import           Text.Parsec             (ParseError, parse)
+
 
 -- Type class describing a mealy machine abstractly.
 -- Note that i o are also part of the signature, so that specialized version
@@ -32,18 +49,26 @@ class Mealy m i o where
   inputs :: m i o -> [i]
   beh :: m i o -> State m i o -> i -> (State m i o, o)
 
+-- An InitialMealy is just a Mealy with an initial state.
+class Mealy m i o => InitialMealy m i o where
+  initialState :: m i o -> State m i o
 
--- The easiest kind representation is one with a Map
--- This could also be represented as Map (s, i) (s, 0)
--- But I choose the curried one for no reason.
-newtype MapMealy s i o = MapMealy (Map s (Map i (s, o)))
+
+-- The easiest kind representation is one with a Map. This could also be
+-- represented as Map (s, i) (s, 0). But I choose the curried one for no
+-- reason. Instead of Map a Trie is also feasible (depending on the
+-- key type). In short, there are many representations, this is just one.
+data MapMealy s i o = MapMealy s (Map s (Map i (s, o)))
 
 instance (Ord s, Ord i) => Mealy (MapMealy s) i o where
   type State (MapMealy s) i o = s
-  states (MapMealy m) = keys m
-  inputs (MapMealy m) = S.toList . M.foldr S.union S.empty . fmap keysSet $ m
-  beh (MapMealy m) s i = ulookup i (ulookup s m)
+  states (MapMealy _ m) = keys m
+  inputs (MapMealy _ m) = S.toList . M.foldr S.union S.empty . fmap keysSet $ m
+  beh (MapMealy _ m) s i = ulookup i (ulookup s m)
     where ulookup k m = fromJust $ M.lookup k m
+
+instance (Ord s, Ord i) => InitialMealy (MapMealy s) i o where
+  initialState (MapMealy s _) = s
 
 
 -- The more interesting one is the Minimized version. Any mealy machine can
@@ -62,6 +87,9 @@ instance (Mealy m i o) => Mealy (Minimized m) i o where
   beh Minimized{..} cls i = (reify ordInstance color partition s2, o)
     where (s2, o) = beh machine (representative partition cls) i
 
+instance (InitialMealy m i o) => InitialMealy (Minimized m) i o where
+  initialState Minimized{..} = reify ordInstance color partition (initialState machine)
+
 -- This function takes a mealy machine and minimizes it
 minimizeMealy :: (Mealy m i o, Ord o, Ord (State m i o)) => m i o -> Minimized m i o
 minimizeMealy mealy = Minimized mealy partition OrdDict
@@ -76,40 +104,57 @@ reify :: OrdDict a -> (Ord a => t) -> t
 reify OrdDict t = t
 
 
--- Below is writing mealy machine into dot files
+-- Below is writing mealy machine into dot files. By convention, the first
+-- node and the first edge are for the initial state. The format is more
+-- or less canonical otherwise.
 class Write a where
   write :: a -> Builder
 
 instance Write String where write = stringUtf8
 instance Write Int where write = write . show
 
-writeMealyToDot :: (Mealy m i o, Write (State m i o), Write i, Write o) => m i o -> Builder
+writeMealyToDot :: (InitialMealy m i o, Ord (State m i o), Write (State m i o), Write i, Write o) => m i o -> Builder
 writeMealyToDot mealy =
   "digraph {\n"
-  <> foldMap (\s -> write s <> "\n") (states mealy)
+  <> foldMap (\s -> write s <> "\n") sortedStates
   <> foldMap (\(s, i, o, s2) -> write s <> " --> " <> write s2 <> " [label=\"" <> write i <> "/" <> write o <> "\"]\n") edges
   <> "}\n"
   where
-    domain = (,) <$> states mealy <*> inputs mealy
+    domain = (,) <$> sortedStates <*> inputs mealy
     edges = [(s, i, snd $ beh mealy s i, fst $ beh mealy s i) | (s, i) <- domain]
+    sortedStates = putInitialFirst (states mealy) (initialState mealy)
+    putInitialFirst ls i = sortOn (/= i) ls
 
 
--- Below is parsing of dot files into mealy machines
+-- Below is parsing of dot files into mealy machines. We will use these
+-- basic types to represent State, Input and Output. Using Text or Vector
+-- or ByteString might speed up things (during, for example, minimization).
+-- But it is already pretty fast
 type MMState = String
 type MMInput = String
 type MMOutput = String
-parseMealy :: ByteString -> Either ParseError (MapMealy MMState MMInput MMOutput)
-parseMealy txt = convert . snd <$> Text.Parsec.parse parseDot "" txt
 
-convert :: [Command] -> MapMealy MMState MMInput MMOutput
-convert graph = MapMealy $ Prelude.foldr handleEdge startMap edges
+-- We should have some way of guessing the initial node
+data InitialGuessStrategy = FirstEdge | FirstNode | Constant String
+  deriving Read
+
+parseMealy :: InitialGuessStrategy -> ByteString -> Either ParseError (MapMealy MMState MMInput MMOutput)
+parseMealy strat txt = convert strat . snd <$> Text.Parsec.parse parseDot "" txt
+
+convert :: InitialGuessStrategy -> [Command] -> MapMealy MMState MMInput MMOutput
+convert strat graph = MapMealy initial $ Prelude.foldr handleEdge startMap edges
   where
     nodes = concatMap getNodes graph
-    getNodes (N n _) = [n]; getNodes (E n1 n2 _) = [n1, n2]
+    getNodes (N n _) = if n `elem` ["graph", "node", "edge"] then [] else [n]
+    getNodes (E n1 n2 _) = [n1, n2]
     startMap = fromList (map (\x -> (x, M.empty)) nodes)
     edges = mapMaybe conv graph
     addEdge i s2 o = insert i (s2, o)
     handleEdge (s, i, o, s2) = adjust (addEdge i s2 o) s
+    initial = case strat of
+      FirstEdge -> (\(a,_,_,_) -> a) (head edges)
+      FirstNode -> head nodes
+      Constant x -> x
 
 conv :: Command -> Maybe (String, String, String, String)
 conv (E fromNode toNode attrs) = do

@@ -6,7 +6,7 @@ license: AllRightsReserved
 stability: experimental
 Executable FSMs
   hs-source-dirs: src
-  ghc-options: -O2 -Wall -fno-warn-name-shadowing -fno-warn-missing-signatures -fprof-auto "-with-rtsopts=-p -s -h"
+  ghc-options: -O2 -Wall -fno-warn-name-shadowing -fno-warn-missing-signatures
   main-is: FSMs.hs
   buildable: True
   build-depends:
@@ -26,7 +26,7 @@ Executable FSMs
       Patterns
 Executable Minimize
   hs-source-dirs: src
-  ghc-options: -O2 -Wall -fno-warn-name-shadowing -fno-warn-missing-signatures -fprof-auto "-with-rtsopts=-p -s -h"
+  ghc-options: -O2 -Wall -fno-warn-name-shadowing -fno-warn-missing-signatures
   main-is: Minimize.hs
   buildable: True
   build-depends:

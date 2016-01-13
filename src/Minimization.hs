@@ -2,6 +2,16 @@
 
 module Minimization where
 
+{-
+ This is an implementation of Moore's algorithm for minimization. It is
+ general enough to handle deterministic complete DFAs and Mealy machines,
+ and probably some other types as well. The current data structure is not
+ the most efficient one, I guess. I believe the complexity is approx.
+ O(n^2 log n), which can be O(n^2). But performance for my purpose was good
+ enough. (I.e. it can handle a Mealy machine with 3410 states and 78 inputs
+ within 20 seconds.)
+-}
+
 import           Control.Arrow   ((&&&))
 import           Data.Map.Strict (Map, empty, insert, lookup)
 import           Data.Maybe      (fromJust)

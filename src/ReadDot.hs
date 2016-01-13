@@ -13,6 +13,8 @@ module ReadDot where
    Won't parse: Subgraphs / clusters
    Won't parse: Multiple edges at once: a -> b -> c
    Won't parse: Undirected graphs
+   Parses attribute statement as node statements
+   Doesn't handle escaped quotes
 -}
 
 import           Control.Arrow          ((&&&))
