@@ -49,7 +49,7 @@ instance (DotPrintable s, DotPrintable i, DotPrintable o) => DotPrintable (Trans
   shouldPrint (s, s2, i, o) = and [shouldPrint s, shouldPrint s2, shouldPrint i, shouldPrint o]
 
 printTransitions :: (DotPrintable s, DotPrintable i, DotPrintable o) => [Trans s i o] -> Builder
-printTransitions ls = mconcat [dotPrint l <> "\n" | l <- ls, shouldPrint l]
+printTransitions ls = mconcat ["  " <> dotPrint l <> "\n" | l <- ls, shouldPrint l]
 
 putInitialFirst :: (Eq s) => [s] -> s -> [s]
 putInitialFirst ls i = sortOn (not . (i ==)) ls

@@ -6,7 +6,8 @@ import Kiss
 import Patterns
 import Reachability
 
-import Data.ByteString.Builder (hPutBuilder, byteString)
+import Data.ByteString.Builder (hPutBuilder)
+import Data.List.Ordered (nubSort)
 import Data.Monoid ((<>))
 import Data.Set (toList)
 import Data.Vector (replicate)
@@ -28,29 +29,40 @@ convert path filename = do
   let (meal1, f1) = addSink (replicate n $ '-') circuit
   let r1 = toList $ reachability (f1 init) (\s -> map (fst . meal1 s) is)
   let (m1, f1') = minimizeMealy r1 is meal1
-  let b1 = byteString "bla 1" <> printTransitions (toTransitions m1 (map f1' r1) is)
+  let b1 = "digraph {\n" <> printTransitions (toTransitions m1 (f1' . f1 $ init) (map f1' r1) is) <> "}\n"
   hPutBuilder stdout b1
 
   let (meal2, f2) = addLoops (replicate n $ '-') circuit
   let r2 = toList $ reachability (f2 init) (\s -> map (fst . meal2 s) is)
   let (m2, f2') = minimizeMealy r2 is meal2
-  let b2 = byteString "bla 2" <> printTransitions (toTransitions m2 (map f2' r2) is)
+  let b2 = "digraph {\n" <> printTransitions (toTransitions m2 (f2' . f2 $ init) (map f2' r2) is) <> "}\n"
   hPutBuilder stdout b2
 
   let (meal3, f3) = addOutputState (replicate n $ '0') set m1
   let r3 = toList $ reachability (f3 . f1' . f1 $ init) (\s -> map (fst . meal3 s) is)
   let (m3, f3') = minimizeMealy r3 is meal3
-  let b3 = byteString "bla 3" <> printTransitions (toTransitions m3 (map f3' r3) is)
+  let b3 = "digraph {\n" <> printTransitions (toTransitions m3 (f3' . f3 . f1' . f1 $ init) (map f3' r3) is) <> "}\n"
   hPutBuilder stdout b3
 
   let (meal4, f4) = addOutputState (replicate n $ '0') set m1
   let r4 = toList $ reachability (f4 . f2' . f2 $ init) (\s -> map (fst . meal4 s) is)
   let (m4, f4') = minimizeMealy r4 is meal4
-  let b4 = byteString "bla 4" <> printTransitions (toTransitions m4 (map f4' r4) is)
+  let b4 = "digraph {\n" <> printTransitions (toTransitions m4 (f4' . f4 . f2' . f2 $ init) (map f4' r4) is) <> "}\n"
   hPutBuilder stdout b4
 
-toTransitions :: Mealy s i o -> [s] -> [i] -> [(s, s, i, o)]
-toTransitions meal ss is = [(s, t, i, o) | s <- ss, i <- is, (t, o) <- [meal s i]]
+data PointedOrd s = PointedOrd { point :: s, extract :: s } deriving Eq
+
+-- only well defined if the points agree
+instance Ord s => Ord (PointedOrd s) where
+  compare p q = case (extract p == point p, extract q == point q) of
+    (True, True) -> EQ
+    (True, False) -> LT
+    (False, True) -> GT
+    (False, False) -> extract p `compare` extract q
+
+toTransitions :: Ord s => Mealy s i o -> s -> [s] -> [i] -> [(s, s, i, o)]
+toTransitions meal initial ss is = [(s, t, i, o) | s <- sortedSs, i <- is, (t, o) <- [meal s i]]
+  where sortedSs = map extract . nubSort . map (PointedOrd initial) $ ss
 
 open :: String -> String -> IO (Maybe (Circuit, [InputPattern], (State, OutputPattern)))
 open path filename = do
