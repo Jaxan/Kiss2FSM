@@ -33,6 +33,7 @@ Executable Minimize
       base -any,
       bytestring -any,
       containers -any,
+      data-ordlist -any,
       mtl -any,
       parsec -any,
       text -any

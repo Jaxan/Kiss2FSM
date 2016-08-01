@@ -112,6 +112,8 @@ class Write a where
 
 instance Write String where write = stringUtf8
 instance Write Int where write = write . show
+instance Write Bool where write = write . show
+instance Write Char where write = write . show
 
 writeMealyToDot :: (InitialMealy m i o, Ord (State m i o), Write (State m i o), Write i, Write o) => m i o -> Builder
 writeMealyToDot mealy =
