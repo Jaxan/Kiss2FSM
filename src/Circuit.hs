@@ -1,3 +1,4 @@
+{-# LANGUAGE PatternGuards #-}
 module Circuit where
 
 import Minimization
@@ -6,6 +7,7 @@ import Reachability
 
 import Data.List.Ordered (nubSort)
 import Data.Map.Strict (Map, lookup, fromSet, intersection)
+import Data.Set (empty, member, insert)
 import Prelude hiding (lookup)
 
 -- Invariant: All circuits are deterministic (which is the case)
@@ -77,3 +79,21 @@ minimizeMealy allStates inputs f = (\srep -> map1 toRep . f (fromRep srep), toRe
     outpufF s = map (\i -> snd $ f s i) inputs
     trans = map (\i s -> fst $ f s i) inputs
     map1 f (a, b) = (f a, b)
+
+-- Checks whether to mealy machines are bisimilar
+-- Could be improved by doing the Hopcroft+Karp up to technique
+bisimilar :: (Eq o, Ord s, Ord t) => [i] -> Mealy s i o -> s -> Mealy t i o -> t -> Bool
+bisimilar inputs m1 s1 m2 t2 = go empty [(s1, t2)] where
+  -- If empty todo, we can return True
+  go _ [] = True
+  -- Else, we have to check a pair in the queue
+  go acc ((s, t):rest)
+    -- If already in the bisimulation, we're done, they are OK
+    | (s, t) `member` acc = True
+    -- If different output, then return false
+    | map (snd . m1 s) inputs /= map (snd . m2 t) inputs = False
+    -- else continue with successors, and add (s,t) to the bisim
+    | newAcc <- insert (s,t) acc
+    , succ1 <- map (fst . m1 s) inputs
+    , succ2 <- map (fst . m2 t) inputs
+    = go newAcc (rest ++ nubSort (zip succ1 succ2))

@@ -15,7 +15,12 @@ Executable FSMs
       containers -any,
       data-ordlist -any,
       directory -any,
+      filepath,
       parsec -any,
+      random,
+      random-extras,
+      random-fu,
+      math-functions == 0.1.*,
       text -any,
       vector -any
   other-modules:
@@ -34,6 +39,7 @@ Executable Minimize
       bytestring -any,
       containers -any,
       data-ordlist -any,
+      filepath,
       mtl -any,
       parsec -any,
       text -any
